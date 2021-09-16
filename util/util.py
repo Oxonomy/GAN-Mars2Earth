@@ -6,6 +6,14 @@ from PIL import Image
 import os
 
 
+def torch_tensor_stack_images_batch_channel(img_batch_0, img_batch_1):
+    img_batch_0 = torch.swapaxes(img_batch_0, 0, 1)
+    img_batch_1 = torch.swapaxes(img_batch_1, 0, 1)
+    img_batch = torch.vstack((img_batch_0, img_batch_1))
+    img_batch = torch.swapaxes(img_batch, 0, 1)
+    return img_batch
+
+
 def tensor2im(input_image, imtype=np.uint8):
     """"Converts a Tensor array into a numpy image array.
     Parameters:

@@ -35,7 +35,7 @@ def display_current_results(model):
 
 def train(model, data_loader):
     total_iters = 0
-    for epoch in range(c.EPOCH_COUNT, c.N_EPOCHS+c.EPOCH_COUNT):
+    for epoch in range(c.EPOCH_COUNT, c.N_EPOCHS + c.EPOCH_COUNT):
         epoch_iter = 0
         model.update_learning_rate()  # update learning rates in the beginning of every epoch.
 
@@ -50,7 +50,6 @@ def train(model, data_loader):
                 display_current_results(model)
 
             wandb.log(model.get_current_losses())
-
 
             if total_iters % 50000 == 0:  # cache our latest model every <save_latest_freq> iterations
                 print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
@@ -81,7 +80,6 @@ def build_data_loader():
     return dataset, data_loader
 
 
-
 if __name__ == '__main__':
     wandb.init(project=c.NAME)
 
@@ -93,4 +91,3 @@ if __name__ == '__main__':
     model = CycleGANModel(name=c.NAME, netG='resnet_9blocks')
     model.setup(continue_train=False, epoch_count=0)
     train(model=model, data_loader=data_loader)
-

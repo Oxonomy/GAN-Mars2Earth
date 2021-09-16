@@ -125,6 +125,16 @@ class CycleGANModel(BaseModel):
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
 
+            self.real_A = None
+            self.real_B = None
+            self.real_a = None
+            self.real_b = None
+
+            self.fake_B = None
+            self.rec_A = None
+            self.fake_A = None
+            self.rec_B = None
+
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
         Parameters:
