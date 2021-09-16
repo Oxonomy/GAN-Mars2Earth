@@ -81,5 +81,5 @@ def build_dataset(dataset_dir, planet, output_size=128):
 
 
 if __name__ == '__main__':
-    #build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='earth', output_size=512)
+    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='earth', output_size=512)
     build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='mars', output_size=512)
