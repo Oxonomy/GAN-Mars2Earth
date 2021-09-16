@@ -32,6 +32,7 @@ def display_current_results(model):
         image = images[image_name]
         image = (image.cpu().detach().numpy() + 1)[0] / 2.0 * 255.0
         image = np.transpose(image, (1, 2, 0))
+        image = image[:,:,:3]
         wandb_images.append(wandb.Image(image, caption=image_name))
     wandb.log({"img": wandb_images})
 
@@ -91,6 +92,6 @@ if __name__ == '__main__':
     dataset_size = len(dataset)
     print('The number of training images = %d' % dataset_size)
 
-    model = FeatureConnectionsCycleGANModel(name=c.NAME, netG='resnet_9blocks', gpu_ids=[])
+    model = FeatureConnectionsCycleGANModel(name=c.NAME, netG='resnet_6blocks', gpu_ids=[], input_nc=9, output_nc=6, lambda_identity=0)
     model.setup(continue_train=False, epoch_count=0)
     train(model=model, data_loader=data_loader)

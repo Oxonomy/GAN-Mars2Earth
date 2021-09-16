@@ -57,6 +57,9 @@ class FeatureConnectionsCycleGANModel(CycleGANModel):
         lambda_A = self.lambda_A
         lambda_B = self.lambda_B
 
+        self.loss_idt_A=0
+        self.loss_idt_B=0
+
         fake_B = torch_tensor_stack_images_batch_channel(self.fake_B, self.real_b)
         fake_A = torch_tensor_stack_images_batch_channel(self.fake_A, self.real_a)
         # GAN loss D_A(G_A(A))
