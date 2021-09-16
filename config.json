@@ -1,0 +1,10 @@
+{
+  "name": "simpsons ",
+
+  "epoch_count": 1,
+  "n_epochs": 1000,
+
+  "batch_size": 32,
+  "image_size": 64,
+  "data_root": "C:\\Users\\Kirill\\Documents\\DataSets\\"
+}
