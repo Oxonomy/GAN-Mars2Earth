@@ -11,6 +11,7 @@ from tqdm import tqdm
 import config as c
 from dataset import MarsEarthDataset
 from models.cycle_gan_model import CycleGANModel
+from models.feature_connections_cycle_gan_model import FeatureConnectionsCycleGANModel
 from util.visualizer import Visualizer
 
 
@@ -63,8 +64,8 @@ def train(model, data_loader):
 
 
 def build_data_loader():
-    dataset = MarsEarthDataset(earth_dir=os.path.join(c.DATA_ROOT, 'gan_data\\img_align_celeba'),
-                               mars_dir=os.path.join(c.DATA_ROOT, 'gan_data\\simpsons'),
+    dataset = MarsEarthDataset(earth_dir=os.path.join(c.DATA_ROOT, 'earth'),
+                               mars_dir=os.path.join(c.DATA_ROOT, 'mars'),
                                image_size=c.IMAGE_SIZE,
                                transform=transforms.Compose([
                                    transforms.Resize(c.IMAGE_SIZE),
@@ -88,6 +89,6 @@ if __name__ == '__main__':
     dataset_size = len(dataset)
     print('The number of training images = %d' % dataset_size)
 
-    model = CycleGANModel(name=c.NAME, netG='resnet_9blocks')
+    model = FeatureConnectionsCycleGANModel(name=c.NAME, netG='resnet_9blocks')
     model.setup(continue_train=False, epoch_count=0)
     train(model=model, data_loader=data_loader)
