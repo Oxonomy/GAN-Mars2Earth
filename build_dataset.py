@@ -71,9 +71,9 @@ def build_dataset(dataset_dir, planet, output_size=128):
     height, width, channels = img_clr.shape
     for x in tqdm(range(0, width - output_size - 1, output_size)):
         for y in range(0, height - output_size - 1, output_size):
-            path_topography = os.path.join(dataset_dir, f"{planet}\\{x}_{y}_topography.png")
-            path_clr = os.path.join(dataset_dir, f"{planet}\\{x}_{y}_clr.png")
-            path_feature = os.path.join(dataset_dir, f"{planet}\\{x}_{y}_feature.png")
+            path_topography = os.path.join(dataset_dir, f"{planet}_{output_size}\\{x}_{y}_topography.png")
+            path_clr = os.path.join(dataset_dir, f"{planet}_{output_size}\\{x}_{y}_clr.png")
+            path_feature = os.path.join(dataset_dir, f"{planet}_{output_size}\\{x}_{y}_feature.png")
 
             save_img_cut(img_topography, x, y, output_size, path_topography)
             save_img_cut(img_clr, x, y, output_size, path_clr)
@@ -81,5 +81,5 @@ def build_dataset(dataset_dir, planet, output_size=128):
 
 
 if __name__ == '__main__':
-    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='earth', output_size=512)
-    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='mars', output_size=512)
+    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='earth', output_size=256)
+    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='mars', output_size=256)

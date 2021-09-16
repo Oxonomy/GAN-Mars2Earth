@@ -16,10 +16,12 @@ from util.visualizer import Visualizer
 
 
 def collate_batch(batch):
-    A, B, A_paths, B_paths = zip(*batch)
+    A, a, A_paths, B, b, B_paths = zip(*batch)
     A = torch.stack(A)
     B = torch.stack(B)
-    return {'A': A, 'B': B, 'A_paths': A_paths, 'B_paths': B_paths}
+    a = torch.stack(a)
+    b = torch.stack(b)
+    return {'A': A, 'B': B, 'a': a, 'b': b, 'A_paths': A_paths, 'B_paths': B_paths}
 
 
 def display_current_results(model):
@@ -64,14 +66,14 @@ def train(model, data_loader):
 
 
 def build_data_loader():
-    dataset = MarsEarthDataset(earth_dir=os.path.join(c.DATA_ROOT, 'earth'),
-                               mars_dir=os.path.join(c.DATA_ROOT, 'mars'),
+    dataset = MarsEarthDataset(earth_dir=os.path.join(c.DATA_ROOT, f'earth_{c.IMAGE_SIZE}'),
+                               mars_dir=os.path.join(c.DATA_ROOT, f'mars_{c.IMAGE_SIZE}'),
                                image_size=c.IMAGE_SIZE,
                                transform=transforms.Compose([
-                                   transforms.Resize(c.IMAGE_SIZE),
-                                   transforms.CenterCrop(c.IMAGE_SIZE),
+                                   #transforms.Resize(c.IMAGE_SIZE),
+                                   #transforms.CenterCrop(c.IMAGE_SIZE),
                                    transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                                   #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                                ])
                                )
 
@@ -89,6 +91,6 @@ if __name__ == '__main__':
     dataset_size = len(dataset)
     print('The number of training images = %d' % dataset_size)
 
-    model = FeatureConnectionsCycleGANModel(name=c.NAME, netG='resnet_9blocks')
+    model = FeatureConnectionsCycleGANModel(name=c.NAME, netG='resnet_9blocks', gpu_ids=[])
     model.setup(continue_train=False, epoch_count=0)
     train(model=model, data_loader=data_loader)

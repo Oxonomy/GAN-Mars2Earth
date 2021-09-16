@@ -1,18 +1,25 @@
 import os
 import random
-
+import re
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
 
 def get_all_files_in_directory_and_subdirectories(dir_path: str,
-                                                  extensions_list: list) -> list:
+                                                  extensions_list: list,
+                                                  prefix_list: list) -> list:
     path_list = []
     for path, subdirs, files in os.walk(dir_path):
         for name in files:
-            if name.split('.')[-1] in extensions_list:
-                path_list.append(os.path.join(path, name))
+            extension = name.split('.')[-1]
+            base_name = re.search(r'\d+_\d+_', name)[0]
+            prefix = re.search(r'[A-Za-z]+', name)[0]
+            if extension in extensions_list and prefix == prefix_list[0]:
+                paths = []
+                for prefix in prefix_list:
+                    paths.append(os.path.join(path, f'{base_name}{prefix}.{extension}'))
+                path_list.append(paths)
     return path_list
 
 
@@ -25,9 +32,11 @@ class MarsEarthDataset(Dataset):
         self.earth_dir = earth_dir
 
         self.mars_file_paths = get_all_files_in_directory_and_subdirectories(self.mars_dir,
-                                                                        ['jpg', 'png'])
+                                                                             ['jpg', 'png'],
+                                                                             ['clr', 'feature', 'topography'])
         self.earth_file_paths = get_all_files_in_directory_and_subdirectories(self.earth_dir,
-                                                                         ['jpg', 'png'])
+                                                                              ['jpg', 'png'],
+                                                                              ['clr', 'feature', 'topography'])
 
     def __len__(self):
         return len(self.mars_file_paths)
@@ -38,10 +47,17 @@ class MarsEarthDataset(Dataset):
         mars_path = self.mars_file_paths[idx]
         earth_path = random.choice(self.earth_file_paths)
 
-        mars_img = self.load_img(mars_path)
-        earth_img = self.load_img(earth_path)
+        mars_clr = self.load_img(mars_path[0])
+        mars_feature = self.load_img(mars_path[1])
+        mars_topography = self.load_img(mars_path[2])
+        mars = torch.vstack((mars_clr, mars_topography))
 
-        return mars_img, earth_img, mars_path, earth_path
+        earth_clr = self.load_img(earth_path[0])
+        earth_feature = self.load_img(earth_path[1])
+        earth_topography = self.load_img(earth_path[2])
+        earth = torch.vstack((earth_clr, earth_topography))
+
+        return mars, mars_feature, mars_path, earth, earth_feature, earth_path
 
     def load_img(self, path):
         img = Image.open(path)

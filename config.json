@@ -5,6 +5,6 @@
   "n_epochs": 1000,
 
   "batch_size": 32,
-  "image_size": 64,
+  "image_size": 256,
   "data_root": "C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth"
 }
