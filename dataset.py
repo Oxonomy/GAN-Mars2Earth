@@ -1,6 +1,8 @@
 import os
 import random
 import re
+
+import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
@@ -24,7 +26,7 @@ def get_all_files_in_directory_and_subdirectories(dir_path: str,
 
 
 class MarsEarthDataset(Dataset):
-    def __init__(self, mars_dir: str, earth_dir: str, transform, image_size):
+    def __init__(self, mars_dir: str, earth_dir: str, transform, image_size, dry_images_percentage=0.01):
         self.transform = transform
         self.image_size = image_size
 
@@ -37,6 +39,10 @@ class MarsEarthDataset(Dataset):
         self.earth_file_paths = get_all_files_in_directory_and_subdirectories(self.earth_dir,
                                                                               ['jpg', 'png'],
                                                                               ['clr', 'feature', 'topography'])
+        if dry_images_percentage < 1:
+            earth_dry_mask = self.get_dry_mask(self.earth_file_paths, dry_images_percentage)
+            self.earth_file_paths = list(np.array(self.earth_file_paths)[earth_dry_mask])
+
 
     def __len__(self):
         return len(self.mars_file_paths)
@@ -66,6 +72,15 @@ class MarsEarthDataset(Dataset):
 
     def augmentations(self):
         pass
+
+    def get_dry_mask(self, paths, dry_images_percentage=0.01) -> np.ndarray:
+        mask = np.zeros(len(paths), dtype=bool)
+        for i, path in enumerate(paths):
+            feature_map = Image.open(path[1])
+            feature_map = np.asarray(feature_map)
+            if np.max(feature_map[:, :, 0]) > 0 or dry_images_percentage > random.random():
+                mask[i] = True
+        return mask
 
     def load_mars_map(self, x_0, y_0, x_1, y_1):
         x_0 = x_0 // self.image_size * self.image_size

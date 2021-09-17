@@ -30,7 +30,8 @@ def display_current_results(model):
     wandb_images = []
     for image_name in images.keys():
         image = images[image_name]
-        image = (image.cpu().detach().numpy() + 1)[0] / 2.0 * 255.0
+        image = image.cpu().detach().numpy()[0]
+        #image = (image.cpu().detach().numpy() + 1)[0] / 2.0 * 255.0
         image = np.transpose(image, (1, 2, 0))
         image = image[:,:,:3]
         wandb_images.append(wandb.Image(image, caption=image_name))
@@ -55,12 +56,12 @@ def train(model, data_loader):
 
             wandb.log(model.get_current_losses())
 
-            if total_iters % 50000 == 0:  # cache our latest model every <save_latest_freq> iterations
+            if total_iters % 5000 == 0:  # cache our latest model every <save_latest_freq> iterations
                 print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
                 save_suffix = 'iter_%d' % total_iters
                 model.save_networks(save_suffix)
 
-        if epoch % 50 == 0:  # cache our model every <save_epoch_freq> epochs
+        if epoch % 5 == 0:  # cache our model every <save_epoch_freq> epochs
             print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
             model.save_networks('latest')
             model.save_networks(epoch)
@@ -70,6 +71,7 @@ def build_data_loader():
     dataset = MarsEarthDataset(earth_dir=os.path.join(c.DATA_ROOT, f'earth_{c.IMAGE_SIZE}'),
                                mars_dir=os.path.join(c.DATA_ROOT, f'mars_{c.IMAGE_SIZE}'),
                                image_size=c.IMAGE_SIZE,
+                               dry_images_percentage=c.DRY_IMAGES_PERCENTAGE,
                                transform=transforms.Compose([
                                    #transforms.Resize(c.IMAGE_SIZE),
                                    #transforms.CenterCrop(c.IMAGE_SIZE),
@@ -92,6 +94,6 @@ if __name__ == '__main__':
     dataset_size = len(dataset)
     print('The number of training images = %d' % dataset_size)
 
-    model = FeatureConnectionsCycleGANModel(name=c.NAME, netG='resnet_6blocks', gpu_ids=[], input_nc=9, output_nc=6, lambda_identity=0)
+    model = FeatureConnectionsCycleGANModel(name=c.NAME, netG='resnet_6blocks', input_nc=9, output_nc=6, lambda_identity=0)
     model.setup(continue_train=False, epoch_count=0)
     train(model=model, data_loader=data_loader)
