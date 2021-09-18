@@ -9,6 +9,18 @@ from .cycle_gan_model import CycleGANModel
 
 class FeatureConnectionsCycleGANModel(CycleGANModel):
 
+    def cut_tensor_into_tiles(self, batch: torch.tensor, tile_axis_count: int = 4) -> list:
+        weight, high = batch.shape[2:]
+        assert high % tile_axis_count != 0 or weight % tile_axis_count != 0
+        tiles = []
+        for i in range(tile_axis_count):
+            for j in range(tile_axis_count):
+                tiles.append(batch[:, :,
+                             weight // tile_axis_count * i + weight // tile_axis_count * (i + 1),
+                             high // tile_axis_count * j + high // tile_axis_count * (j + 1),
+                             ])
+        return tiles
+
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
         Parameters:
@@ -18,6 +30,7 @@ class FeatureConnectionsCycleGANModel(CycleGANModel):
         AtoB = self.direction == 'AtoB'
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_a = input['a' if AtoB else 'b'].to(self.device)
+        self.real_A_tiles = self.cut_tensor_into_tiles(self.real_A)
 
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.real_b = input['b' if AtoB else 'a'].to(self.device)
@@ -57,8 +70,8 @@ class FeatureConnectionsCycleGANModel(CycleGANModel):
         lambda_A = self.lambda_A
         lambda_B = self.lambda_B
 
-        self.loss_idt_A=0
-        self.loss_idt_B=0
+        self.loss_idt_A = 0
+        self.loss_idt_B = 0
 
         fake_B = torch_tensor_stack_images_batch_channel(self.fake_B, self.real_b)
         fake_A = torch_tensor_stack_images_batch_channel(self.fake_A, self.real_a)

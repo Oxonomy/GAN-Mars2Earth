@@ -10,19 +10,23 @@ from torch.utils.data import Dataset
 
 def get_all_files_in_directory_and_subdirectories(dir_path: str,
                                                   extensions_list: list,
-                                                  prefix_list: list) -> list:
+                                                  prefix_list: list) -> (list, list):
     path_list = []
+    coordinate_list = []
     for path, subdirs, files in os.walk(dir_path):
         for name in files:
             extension = name.split('.')[-1]
             base_name = re.search(r'\d+_\d+_', name)[0]
             prefix = re.search(r'[A-Za-z]+', name)[0]
             if extension in extensions_list and prefix == prefix_list[0]:
+                coordinate = re.findall(r'\d+', base_name)
+                coordinate = list(map(int, coordinate))
+                coordinate_list.append(coordinate)
                 paths = []
                 for prefix in prefix_list:
                     paths.append(os.path.join(path, f'{base_name}{prefix}.{extension}'))
                 path_list.append(paths)
-    return path_list
+    return path_list, coordinate_list
 
 
 class MarsEarthDataset(Dataset):
@@ -33,25 +37,26 @@ class MarsEarthDataset(Dataset):
         self.mars_dir = mars_dir
         self.earth_dir = earth_dir
 
-        self.mars_file_paths = get_all_files_in_directory_and_subdirectories(self.mars_dir,
-                                                                             ['jpg', 'png'],
-                                                                             ['clr', 'feature', 'topography'])
-        self.earth_file_paths = get_all_files_in_directory_and_subdirectories(self.earth_dir,
-                                                                              ['jpg', 'png'],
-                                                                              ['clr', 'feature', 'topography'])
+        self.mars_file_paths, self.mars_coordinates = get_all_files_in_directory_and_subdirectories(self.mars_dir,
+                                                                                                    ['jpg', 'png'],
+                                                                                                    ['clr', 'feature', 'topography'])
+        self.earth_file_paths, self.earth_coordinates = get_all_files_in_directory_and_subdirectories(self.earth_dir,
+                                                                                                      ['jpg', 'png'],
+                                                                                                      ['clr', 'feature', 'topography'])
         if dry_images_percentage < 1:
             earth_dry_mask = self.get_dry_mask(self.earth_file_paths, dry_images_percentage)
-            self.earth_file_paths = list(np.array(self.earth_file_paths)[earth_dry_mask])
-
+            self.earth_file_paths = np.array(self.earth_file_paths)[earth_dry_mask].tolist()
 
     def __len__(self):
         return len(self.mars_file_paths)
 
-    def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-        mars_path = self.mars_file_paths[idx]
-        earth_path = random.choice(self.earth_file_paths)
+    def __getitem__(self, mars_idx):
+        mars_path = self.mars_file_paths[mars_idx]
+        mars_coordinate = self.mars_coordinates[mars_idx]
+
+        earth_idx = random.randrange(len(self.earth_file_paths))
+        earth_path = self.earth_file_paths[earth_idx]
+        earth_coordinate = self.earth_coordinates[earth_idx]
 
         mars_clr = self.load_img(mars_path[0])
         mars_feature = self.load_img(mars_path[1])
@@ -63,7 +68,7 @@ class MarsEarthDataset(Dataset):
         earth_topography = self.load_img(earth_path[2])
         earth = torch.vstack((earth_clr, earth_topography))
 
-        return mars, mars_feature, mars_path, earth, earth_feature, earth_path
+        return mars, mars_feature, mars_path, mars_coordinate, earth, earth_feature, earth_path, earth_coordinate
 
     def load_img(self, path):
         img = Image.open(path)
@@ -96,3 +101,15 @@ class MarsEarthDataset(Dataset):
                 images[-1].append(self.load_img(path))
             images[-1] = torch.stack(images[-1])
         return images
+
+
+def collate_batch(batch):
+    A, a, A_paths, A_coordinates, B, b, B_paths, B_coordinates = zip(*batch)
+    A = torch.stack(A)
+    B = torch.stack(B)
+    a = torch.stack(a)
+    b = torch.stack(b)
+    return {'A': A, 'B': B,
+            'a': a, 'b': b,
+            'A_paths': A_paths, 'B_paths': B_paths,
+            'A_coordinates': A_coordinates, 'B_coordinates': B_coordinates}

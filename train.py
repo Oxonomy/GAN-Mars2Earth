@@ -9,19 +9,10 @@ import wandb
 from tqdm import tqdm
 
 import config as c
-from dataset import MarsEarthDataset
+from dataset import MarsEarthDataset, collate_batch
 from models.cycle_gan_model import CycleGANModel
 from models.feature_connections_cycle_gan_model import FeatureConnectionsCycleGANModel
 from util.visualizer import Visualizer
-
-
-def collate_batch(batch):
-    A, a, A_paths, B, b, B_paths = zip(*batch)
-    A = torch.stack(A)
-    B = torch.stack(B)
-    a = torch.stack(a)
-    b = torch.stack(b)
-    return {'A': A, 'B': B, 'a': a, 'b': b, 'A_paths': A_paths, 'B_paths': B_paths}
 
 
 def display_current_results(model):
@@ -31,7 +22,6 @@ def display_current_results(model):
     for image_name in images.keys():
         image = images[image_name]
         image = image.cpu().detach().numpy()[0]
-        #image = (image.cpu().detach().numpy() + 1)[0] / 2.0 * 255.0
         image = np.transpose(image, (1, 2, 0))
         image = image[:,:,:3]
         wandb_images.append(wandb.Image(image, caption=image_name))
@@ -67,11 +57,11 @@ def train(model, data_loader):
             model.save_networks(epoch)
 
 
-def build_data_loader():
+def build_data_loader(shuffle=True, dry_images_percentage=c.DRY_IMAGES_PERCENTAGE):
     dataset = MarsEarthDataset(earth_dir=os.path.join(c.DATA_ROOT, f'earth_{c.IMAGE_SIZE}'),
                                mars_dir=os.path.join(c.DATA_ROOT, f'mars_{c.IMAGE_SIZE}'),
                                image_size=c.IMAGE_SIZE,
-                               dry_images_percentage=c.DRY_IMAGES_PERCENTAGE,
+                               dry_images_percentage=dry_images_percentage,
                                transform=transforms.Compose([
                                    #transforms.Resize(c.IMAGE_SIZE),
                                    #transforms.CenterCrop(c.IMAGE_SIZE),
@@ -81,7 +71,7 @@ def build_data_loader():
                                )
 
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=c.BATCH_SIZE,
-                                              shuffle=True, collate_fn=collate_batch
+                                              shuffle=shuffle, collate_fn=collate_batch
                                               )
     return dataset, data_loader
 
@@ -95,5 +85,5 @@ if __name__ == '__main__':
     print('The number of training images = %d' % dataset_size)
 
     model = FeatureConnectionsCycleGANModel(name=c.NAME, netG='resnet_6blocks', input_nc=9, output_nc=6, lambda_identity=0)
-    model.setup(continue_train=False, epoch_count=0)
+    model.setup(continue_train=True, epoch_count=0)
     train(model=model, data_loader=data_loader)

@@ -4,7 +4,7 @@
   "epoch_count": 1,
   "n_epochs": 1000,
 
-  "batch_size": 2,
+  "batch_size": 1,
   "image_size": 256,
   "dry_images_percentage": 0.01,
   "data_root": "C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth"
