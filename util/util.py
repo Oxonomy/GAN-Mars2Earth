@@ -1,5 +1,8 @@
 """This module contains simple helper functions """
 from __future__ import print_function
+
+import random
+
 import torch
 import numpy as np
 from PIL import Image
@@ -103,3 +106,14 @@ def mkdir(path):
     """
     if not os.path.exists(path):
         os.makedirs(path)
+
+
+def get_noise_matrix(image_size):
+    value_0 = random.random()
+    value_1 = value_0 + random.random() / 10 - 1/20
+    noise_layer = np.tile(np.linspace(value_0, value_1, image_size), (image_size, 1))
+
+    value_0 = random.random()
+    value_1 = value_0 + random.random() / 10 - 1/20
+    noise_layer += np.tile(np.linspace(value_0, value_1, image_size), (image_size, 1)).T
+    return noise_layer

@@ -12,6 +12,7 @@ import config as c
 from dataset import MarsEarthDataset, collate_batch
 from models.cycle_gan_model import CycleGANModel
 from models.feature_connections_cycle_gan_model import FeatureConnectionsCycleGANModel
+from models.tile_cycle_gan_model import TileCycleGANModel
 from util.visualizer import Visualizer
 
 
@@ -23,12 +24,13 @@ def display_current_results(model):
         image = images[image_name]
         image = image.cpu().detach().numpy()[0]
         image = np.transpose(image, (1, 2, 0))
-        image = image[:,:,:3]
+        image = image[:, :, :3]
         wandb_images.append(wandb.Image(image, caption=image_name))
     wandb.log({"img": wandb_images})
 
 
 def train(model, data_loader):
+    wandb.init(project=c.NAME)
     total_iters = 0
     for epoch in range(c.EPOCH_COUNT, c.N_EPOCHS + c.EPOCH_COUNT):
         epoch_iter = 0
@@ -61,12 +63,8 @@ def build_data_loader(shuffle=True, dry_images_percentage=c.DRY_IMAGES_PERCENTAG
     dataset = MarsEarthDataset(earth_dir=os.path.join(c.DATA_ROOT, f'earth_{c.IMAGE_SIZE}'),
                                mars_dir=os.path.join(c.DATA_ROOT, f'mars_{c.IMAGE_SIZE}'),
                                image_size=c.IMAGE_SIZE,
-                               dry_images_percentage=dry_images_percentage,
                                transform=transforms.Compose([
-                                   #transforms.Resize(c.IMAGE_SIZE),
-                                   #transforms.CenterCrop(c.IMAGE_SIZE),
-                                   transforms.ToTensor(),
-                                   #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                                   transforms.ToTensor()
                                ])
                                )
 
@@ -77,13 +75,11 @@ def build_data_loader(shuffle=True, dry_images_percentage=c.DRY_IMAGES_PERCENTAG
 
 
 if __name__ == '__main__':
-    wandb.init(project=c.NAME)
-
     dataset, data_loader = build_data_loader()
 
     dataset_size = len(dataset)
     print('The number of training images = %d' % dataset_size)
 
-    model = FeatureConnectionsCycleGANModel(name=c.NAME, netG='resnet_6blocks', input_nc=9, output_nc=6, lambda_identity=0)
-    model.setup(continue_train=True, epoch_count=0)
+    model = TileCycleGANModel(name=c.NAME, netG='unet_128', input_nc=9, output_nc=9, lambda_identity=0)
+    model.setup(continue_train=False, epoch_count=0)
     train(model=model, data_loader=data_loader)

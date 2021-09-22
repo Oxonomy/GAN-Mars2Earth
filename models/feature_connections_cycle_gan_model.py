@@ -1,5 +1,4 @@
 import torch
-import itertools
 from util.image_pool import ImagePool
 from util.util import torch_tensor_stack_images_batch_channel
 
@@ -7,19 +6,35 @@ from . import networks
 from .cycle_gan_model import CycleGANModel
 
 
-class FeatureConnectionsCycleGANModel(CycleGANModel):
+def recover_image_from_tiles(tiles: list, tile_axis_count: int = 2):
+    image = []
+    for i in range(0, len(tiles), tile_axis_count):
+        image.append(torch.cat(tiles[i:i + tile_axis_count], 3))
+    image = torch.cat(image, 2)
+    return image
 
-    def cut_tensor_into_tiles(self, batch: torch.tensor, tile_axis_count: int = 4) -> list:
-        weight, high = batch.shape[2:]
-        assert high % tile_axis_count != 0 or weight % tile_axis_count != 0
-        tiles = []
-        for i in range(tile_axis_count):
-            for j in range(tile_axis_count):
-                tiles.append(batch[:, :,
-                             weight // tile_axis_count * i + weight // tile_axis_count * (i + 1),
-                             high // tile_axis_count * j + high // tile_axis_count * (j + 1),
-                             ])
-        return tiles
+
+def cut_tensor_into_tiles(batch: torch.tensor, tile_axis_count: int = 2) -> list:
+    weight, high = batch.shape[2:]
+    assert high % tile_axis_count == 0 and weight % tile_axis_count == 0
+    tiles = []
+    for i in range(tile_axis_count):
+        for j in range(tile_axis_count):
+            tiles.append(batch[:, :,
+                         weight // tile_axis_count * i: weight // tile_axis_count * (i + 1),
+                         high // tile_axis_count * j: high // tile_axis_count * (j + 1),
+                         ])
+    return tiles
+
+
+def tiles_netG_prediction(netG, input: torch.tensor):
+    tiles = cut_tensor_into_tiles(input)
+    for i, tile in enumerate(tiles):
+        tiles[i] = netG(tile)
+    return recover_image_from_tiles(tiles)
+
+
+class FeatureConnectionsCycleGANModel(CycleGANModel):
 
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
@@ -30,10 +45,10 @@ class FeatureConnectionsCycleGANModel(CycleGANModel):
         AtoB = self.direction == 'AtoB'
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_a = input['a' if AtoB else 'b'].to(self.device)
-        self.real_A_tiles = self.cut_tensor_into_tiles(self.real_A)
 
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.real_b = input['b' if AtoB else 'a'].to(self.device)
+
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
     def forward(self):
@@ -41,13 +56,13 @@ class FeatureConnectionsCycleGANModel(CycleGANModel):
         real_A = torch_tensor_stack_images_batch_channel(self.real_A, self.real_b)
         real_B = torch_tensor_stack_images_batch_channel(self.real_B, self.real_a)
 
-        self.fake_B = self.netG_A(real_A)  # G_A(A)
+        self.fake_B = tiles_netG_prediction(self.netG_A, real_A)  # G_A(A)
         fake_B = torch_tensor_stack_images_batch_channel(self.fake_B, self.real_a)
-        self.rec_A = self.netG_B(fake_B)  # G_B(G_A(A))
+        self.rec_A = tiles_netG_prediction(self.netG_B, fake_B)  # G_B(G_A(A))
 
-        self.fake_A = self.netG_B(real_B)  # G_B(B)
+        self.fake_A = tiles_netG_prediction(self.netG_B, real_B)  # G_B(B)
         fake_A = torch_tensor_stack_images_batch_channel(self.fake_A, self.real_b)
-        self.rec_B = self.netG_A(fake_A)  # G_A(G_B(B))
+        self.rec_B = tiles_netG_prediction(self.netG_A, fake_A)  # G_A(G_B(B))
 
     def backward_D_A(self):
         """Calculate GAN loss for discriminator D_A"""
@@ -86,3 +101,4 @@ class FeatureConnectionsCycleGANModel(CycleGANModel):
         # combined loss and calculate gradients
         self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B
         self.loss_G.backward()
+

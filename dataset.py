@@ -7,6 +7,8 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
+from util.util import get_noise_matrix
+
 
 def get_all_files_in_directory_and_subdirectories(dir_path: str,
                                                   extensions_list: list,
@@ -30,7 +32,7 @@ def get_all_files_in_directory_and_subdirectories(dir_path: str,
 
 
 class MarsEarthDataset(Dataset):
-    def __init__(self, mars_dir: str, earth_dir: str, transform, image_size, dry_images_percentage=0.01):
+    def __init__(self, mars_dir: str, earth_dir: str, transform, image_size):
         self.transform = transform
         self.image_size = image_size
 
@@ -43,9 +45,12 @@ class MarsEarthDataset(Dataset):
         self.earth_file_paths, self.earth_coordinates = get_all_files_in_directory_and_subdirectories(self.earth_dir,
                                                                                                       ['jpg', 'png'],
                                                                                                       ['clr', 'feature', 'topography'])
-        if dry_images_percentage < 1:
-            earth_dry_mask = self.get_dry_mask(self.earth_file_paths, dry_images_percentage)
-            self.earth_file_paths = np.array(self.earth_file_paths)[earth_dry_mask].tolist()
+
+    def get_noise_layers(self, layers_count: int):
+        noise_layers = np.zeros((self.image_size, self.image_size, layers_count))
+        for i in range(layers_count):
+            noise_layers[:,:,i] = get_noise_matrix(self.image_size)
+        return self.transform(noise_layers)
 
     def __len__(self):
         return len(self.mars_file_paths)
@@ -59,16 +64,16 @@ class MarsEarthDataset(Dataset):
         earth_coordinate = self.earth_coordinates[earth_idx]
 
         mars_clr = self.load_img(mars_path[0])
-        mars_feature = self.load_img(mars_path[1])
         mars_topography = self.load_img(mars_path[2])
-        mars = torch.vstack((mars_clr, mars_topography))
+        mars_noise = self.get_noise_layers(3)
+        mars = torch.vstack((mars_clr, mars_topography, mars_noise))
 
         earth_clr = self.load_img(earth_path[0])
-        earth_feature = self.load_img(earth_path[1])
         earth_topography = self.load_img(earth_path[2])
-        earth = torch.vstack((earth_clr, earth_topography))
+        earth_noise = self.get_noise_layers(3)
+        earth = torch.vstack((earth_clr, earth_topography, earth_noise))
 
-        return mars, mars_feature, mars_path, mars_coordinate, earth, earth_feature, earth_path, earth_coordinate
+        return mars, mars_path, mars_coordinate, earth, earth_path, earth_coordinate
 
     def load_img(self, path):
         img = Image.open(path)
@@ -77,15 +82,6 @@ class MarsEarthDataset(Dataset):
 
     def augmentations(self):
         pass
-
-    def get_dry_mask(self, paths, dry_images_percentage=0.01) -> np.ndarray:
-        mask = np.zeros(len(paths), dtype=bool)
-        for i, path in enumerate(paths):
-            feature_map = Image.open(path[1])
-            feature_map = np.asarray(feature_map)
-            if np.max(feature_map[:, :, 0]) > 0 or dry_images_percentage > random.random():
-                mask[i] = True
-        return mask
 
     def load_mars_map(self, x_0, y_0, x_1, y_1):
         x_0 = x_0 // self.image_size * self.image_size
@@ -104,12 +100,9 @@ class MarsEarthDataset(Dataset):
 
 
 def collate_batch(batch):
-    A, a, A_paths, A_coordinates, B, b, B_paths, B_coordinates = zip(*batch)
-    A = torch.stack(A)
-    B = torch.stack(B)
-    a = torch.stack(a)
-    b = torch.stack(b)
+    A, A_paths, A_coordinates, B, B_paths, B_coordinates = zip(*batch)
+    A = torch.stack(A).type(torch.FloatTensor)
+    B = torch.stack(B).type(torch.FloatTensor)
     return {'A': A, 'B': B,
-            'a': a, 'b': b,
             'A_paths': A_paths, 'B_paths': B_paths,
             'A_coordinates': A_coordinates, 'B_coordinates': B_coordinates}
