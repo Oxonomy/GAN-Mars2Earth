@@ -46,40 +46,22 @@ def save_img_cut(img, x, y, output_size, path):
     cv2.imwrite(path, img)
 
 
-def build_feature_map(img_topography, height, width, output_size):
-    img_mask = (img_topography > 0).astype(np.uint8) * 255
-    img_lat = np.concatenate([np.tile(np.linspace(0, 255, num=height // 2, dtype=np.uint8), (width, 1)).T,
-                              np.tile(np.linspace(255, 0, num=height // 2, dtype=np.uint8), (width, 1)).T])
-
-    img_alt = cv2.resize(img_topography, dsize=(width // output_size, height // output_size), interpolation=cv2.INTER_CUBIC)
-    img_alt = cv2.resize(img_alt, dsize=(width, height), interpolation=cv2.INTER_CUBIC)
-    feature_map = np.stack([img_mask, img_lat, img_alt], axis=0)
-    feature_map = np.swapaxes(feature_map, 0, 2)
-    feature_map = np.swapaxes(feature_map, 0, 1)
-    return feature_map
-
-
 def build_dataset(dataset_dir, planet, output_size=128):
     img_clr = cv2.imread(os.path.join(dataset_dir, f'{planet}_clr.tif'))
     img_topography = cv2.imread(os.path.join(dataset_dir, f'{planet}_topography.tif'), -1)
 
-    height, width, channels = img_clr.shape
-
-    img_feature = build_feature_map(img_topography, height, width, output_size)
     img_topography = build_gradient_map(img_topography)
 
     height, width, channels = img_clr.shape
-    for x in tqdm(range(0, width - output_size - 1, output_size)):
-        for y in range(0, height - output_size - 1, output_size):
+    for x in tqdm(range(0, width - output_size - 1, output_size // 4)):
+        for y in range(0, height - output_size - 1, output_size // 4):
             path_topography = os.path.join(dataset_dir, f"{planet}_{output_size}\\{x}_{y}_topography.png")
             path_clr = os.path.join(dataset_dir, f"{planet}_{output_size}\\{x}_{y}_clr.png")
-            path_feature = os.path.join(dataset_dir, f"{planet}_{output_size}\\{x}_{y}_feature.png")
 
             save_img_cut(img_topography, x, y, output_size, path_topography)
             save_img_cut(img_clr, x, y, output_size, path_clr)
-            save_img_cut(img_feature, x, y, output_size, path_feature)
 
 
 if __name__ == '__main__':
-    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='earth', output_size=1024)
-    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='mars', output_size=1024)
+    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='earth', output_size=256)
+    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='mars', output_size=256)

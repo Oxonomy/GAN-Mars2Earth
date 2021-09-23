@@ -576,3 +576,37 @@ class PixelDiscriminator(nn.Module):
     def forward(self, input):
         """Standard forward."""
         return self.net(input)
+
+class TileGenerator:
+    def __init__(self, netG, tile_axis_count: int = 2):
+        self.netG = netG
+        self.tile_axis_count = tile_axis_count
+
+    def parameters(self):
+        return self.netG.parameters()
+
+    def __call__(self, input):
+        tiles = self.cut_tensor_into_tiles(input)
+        for i, tile in enumerate(tiles):
+            tiles[i] = self.netG(tile)
+        return self.recover_image_from_tiles(tiles)
+
+    def recover_image_from_tiles(self, tiles: list):
+        image = []
+        for i in range(0, len(tiles), self.tile_axis_count):
+            image.append(torch.cat(tiles[i:i + self.tile_axis_count], 3))
+        image = torch.cat(image, 2)
+        return image
+
+    def cut_tensor_into_tiles(self, batch: torch.tensor) -> list:
+        weight, high = batch.shape[2:]
+        assert high % self.tile_axis_count == 0 and weight % self.tile_axis_count == 0
+        tiles = []
+        for i in range(self.tile_axis_count):
+            for j in range(self.tile_axis_count):
+                tiles.append(batch[:, :,
+                             weight // self.tile_axis_count * i: weight // self.tile_axis_count * (i + 1),
+                             high // self.tile_axis_count * j: high // self.tile_axis_count * (j + 1),
+                             ])
+        return tiles
+

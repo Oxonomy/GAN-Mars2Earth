@@ -1,8 +1,10 @@
 import torch
+from PIL import Image
 from tqdm import tqdm
 import cv2
 import config as c
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 from train import build_data_loader
 from models.feature_connections_cycle_gan_model import FeatureConnectionsCycleGANModel
@@ -43,10 +45,6 @@ def map_build(data_loader, model):
         real_a = data['a']
         real_B = data['B']
         real_b = data['b']
-
-        #plt.imshow(np.transpose(real_A.cpu().detach().numpy()[0], (1, 2, 0))[:, :, :3])
-        #plt.show()
-        #real_a[:,:,:,2]= 0
         real_A = torch_tensor_stack_images_batch_channel(real_A, real_a)
         fake_B = model.netG_A(real_A)
 
@@ -58,8 +56,6 @@ def map_build(data_loader, model):
 
         A_coordinates += data['A_coordinates']
         B_coordinates += data['B_coordinates']
-        if len(fake_A_list) > 100:
-            break
 
     fake_A_list = list(map(lambda i: (fake_A_list[i], B_coordinates[i]), range(len(fake_A_list))))
     fake_B_list = list(map(lambda i: (fake_B_list[i], A_coordinates[i]), range(len(fake_B_list))))
@@ -69,10 +65,14 @@ def map_build(data_loader, model):
     fake_A = image_from_array(fake_B_list)
     fake_B = image_from_array(fake_B_list)
 
-    cv2.imwrite('fake_A.jpg', fake_A[:, :, :3])
-    cv2.imwrite('fake_B.jpg', fake_B[:, :, :3])
-    plt.imshow(fake_A[:, :, :3])
-    plt.show()
+    fake_A -= np.min(fake_A)
+    fake_A /= np.max(fake_A)
+
+    fake_B -= np.min(fake_B)
+    fake_B /= np.max(fake_B)
+
+    plt.imsave("fake_A.jpg", fake_A[:, :, :3])
+    plt.imsave("fake_B.jpg", fake_B[:, :, :3])
     # for coordinate, image in zip(A_coordinates, fake_B_list):
 
 
