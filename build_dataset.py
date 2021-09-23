@@ -53,8 +53,8 @@ def build_dataset(dataset_dir, planet, output_size=128):
     img_topography = build_gradient_map(img_topography)
 
     height, width, channels = img_clr.shape
-    for x in tqdm(range(0, width - output_size - 1, output_size // 4)):
-        for y in range(0, height - output_size - 1, output_size // 4):
+    for x in tqdm(range(0, width - output_size - 1, output_size // 2)):
+        for y in range(0, height - output_size - 1, output_size // 2):
             path_topography = os.path.join(dataset_dir, f"{planet}_{output_size}\\{x}_{y}_topography.png")
             path_clr = os.path.join(dataset_dir, f"{planet}_{output_size}\\{x}_{y}_clr.png")
 
@@ -63,5 +63,5 @@ def build_dataset(dataset_dir, planet, output_size=128):
 
 
 if __name__ == '__main__':
-    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='earth', output_size=256)
-    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='mars', output_size=256)
+    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='earth', output_size=384)
+    build_dataset(dataset_dir='C:\\Users\\Kirill\\Documents\\DataSets\\mars2earth', planet='mars', output_size=384)
