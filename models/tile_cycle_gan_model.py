@@ -8,7 +8,7 @@ from .networks import TileGenerator
 
 class TileCycleGANModel(BaseModel):
     """
-    This class implements the CycleGAN model, for learning image-to-image translation without paired data.
+    This class implements the0.0.......... CycleGAN model, for learning image-to-image translation without paired data.
     By default, it uses a '--netG resnet_9blocks' ResNet generator,
     a '--netD basic' discriminator (PatchGAN introduced by pix2pix),
     and a least-square GANs objective ('--gan_mode lsgan').
