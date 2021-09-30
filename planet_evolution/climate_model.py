@@ -1,7 +1,8 @@
 import os
 from copy import copy
 from math import sin
-
+import time
+import deltaflow
 import numpy
 import cv2
 import cupy as np
@@ -9,12 +10,12 @@ import matplotlib
 from cupyx import scipy
 from cupyx.scipy.ndimage import gaussian_filter
 from matplotlib import pyplot as plt
-from matplotlib.image import imread
+from matplotlib.image import imread, imsave
 from matplotlib.pyplot import figure, draw, pause
 import matplotlib.animation as animation
 from line_profiler_pycharm import profile
 
-# matplotlib.use('TkAgg')
+#matplotlib.use('TkAgg')
 import config as c
 
 
@@ -31,32 +32,40 @@ class Planet:
                  soil_coef: coefficients,
                  water_coef: coefficients,
                  air_coef: coefficients):
-
         self.soil_coef = soil_coef
         self.water_coef = water_coef
         self.air_coef = air_coef
 
         self.topography = np.array(cv2.imread(topography_path, 0))
+        self.w, self.h = self.topography.shape
+
         self.water = (self.topography < sea_altitude).astype(int)
         self.angle = 0
+        self.iteration = 0
         self.solar_irradiance = self.__build_solar_irradiance()
 
         self.surface_temperature = np.ones(self.topography.shape) * 6
         self.air_temperature = np.ones(self.topography.shape) * 6
 
         self.atmosphere_pressure = self.air_temperature
-        self.wind = np.zeros(self.topography.shape + (9,))
+        self.atmosphere_velocity = numpy.zeros((self.w, self.h, 2))
+        self.atmosphere_force = numpy.zeros((self.w, self.h, 2))
+
+        self.atmosphere_simulation_config = deltaflow.SimulationConfig(
+            delta_t=0.1,
+            density_coeff=1.0,  # Fluid density. Denser fluids care respond to pressure more slowly.
+            diffusion_coeff=1e-3  # Diffusion coefficient. Higher values cause higher diffusion and viscosity.
+        )
 
     def update(self, angle):
+        self.iteration += 1
         self.angle = angle
         self.solar_irradiance = self.__build_solar_irradiance()
         self.update_temperature()
         self.update_atmosphere_pressure()
-        self.update_wind()
 
-        # test = copy(self.air_temperature)
-        self.air_temperature = self.do_wind_diffusion(self.air_temperature, 0.01)
-        # print(np.mean(np.abs(test-self.air_temperatur)))
+        self.do_wind_diffusion()
+
 
     def update_temperature(self):
         self.surface_temperature += self.solar_irradiance * \
@@ -85,14 +94,13 @@ class Planet:
                                     * (self.water / self.water_coef.heat_capacity
                                        + (1 - self.water) / self.soil_coef.heat_capacity)
 
-        #self.air_temperature = np.abs(self.air_temperature)
-        #self.air_temperature -= 0.92 * self.air_temperature ** 4 / self.air_coef.heat_capacity / 10 ** 3
+        # self.air_temperature = np.abs(self.air_temperature)
+        # self.air_temperature -= 0.92 * self.air_temperature ** 4 / self.air_coef.heat_capacity / 10 ** 3
 
-        # Gaussian filter for air temperature
         self.air_temperature = gaussian_filter(self.air_temperature, sigma=3)
 
     def update_atmosphere_pressure(self):
-        self.atmosphere_pressure = 10 / np.copy(self.air_temperature)
+        self.atmosphere_pressure = 100 / np.copy(self.air_temperature)
 
     def do_heat_transfer(self, matrix_a, matrix_b, mask,
                          heat_capacity_coefficient_a=100.0,
@@ -103,30 +111,36 @@ class Planet:
         temperature_delta_a = -energy_delta / heat_capacity_coefficient_a
         return matrix_a + temperature_delta_a, matrix_b + temperature_delta_b
 
-    def do_wind_diffusion(self, matrix, diffusion_coeff=1.0):
-        matrix_multiply_pressure = copy(matrix) * self.atmosphere_pressure
-        wind = self.wind * diffusion_coeff
+    def do_wind_diffusion(self):
+        color = np.stack((self.air_temperature,
+                          self.air_temperature,
+                          self.air_temperature), axis=2)
 
-        for i in range(3):
-            for j in range(3):
-                roll_matrix = np.roll(matrix, i - 1, axis=0)
-                roll_matrix = np.roll(roll_matrix, j - 1, axis=1)
-                roll_matrix = roll_matrix * wind[:, :, i * 3 + j]
-                matrix_multiply_pressure -= roll_matrix
-        matrix = matrix_multiply_pressure / (self.atmosphere_pressure + np.sum(wind, axis=2))
-        return matrix
+        color=color.get()
+        self.atmosphere_pressure = self.atmosphere_pressure.get()
 
-    def update_wind(self):
-        for i in range(3):
-            for j in range(3):
-                atmosphere_pressure = copy(self.atmosphere_pressure)
-                wind = np.roll(atmosphere_pressure, i - 1, axis=0)
-                wind = np.roll(wind, j - 1, axis=1)
-                wind = wind - atmosphere_pressure
-                wind = (wind * (wind > 0))**0.2 - (np.abs(wind) * (wind < 0))**0.2
-                self.wind[:, :, i * 3 + j] = wind
-        self.wind[0] = 0
-        self.wind[-1] = 0
+        for i in range(10):
+            color, self.atmosphere_velocity, self.atmosphere_pressure = deltaflow.step(
+                color=color,
+                velocity=self.atmosphere_velocity,
+                pressure=self.atmosphere_pressure,
+                force=self.atmosphere_force,
+                config=self.atmosphere_simulation_config
+            )
+
+        self.atmosphere_pressure = np.array(self.atmosphere_pressure)
+        self.air_temperature = copy(np.array(color[:, :, 0]))
+
+        color = numpy.array(color)
+        color /= numpy.max(color)
+        color -= numpy.min(color)
+        from matplotlib.pyplot import figure
+
+        fig = figure(figsize=(10, 10))
+        plt.axis('off')
+        plt.imshow(color[:,:,0])
+        plt.savefig(f'output/{self.iteration}.jpg')
+        plt.close(fig)
 
     def __build_solar_irradiance(self):
         solar_irradiance = np.concatenate([np.tile(np.linspace(0, 1.0, num=self.topography.shape[0] // 2),
@@ -173,18 +187,9 @@ class Planet:
         axs[4][1].set_title('atmosphere_pressure_hist')
         axs[4][1].hist(self.atmosphere_pressure.get().reshape(-1), bins=30)
 
-        axs[5][0].set_title('wind')
-        axs[5][0].imshow(numpy.sum(numpy.absolute(self.wind.get()), axis=2))
-
-        axs[5][1].set_title('wind_hist')
-        axs[5][1].hist(numpy.sum(numpy.absolute(self.wind.get()), axis=2).reshape(-1), bins=30, log=True)
-
         plt.show()
 
 
-import time
-
-start_time = time.time()
 if __name__ == '__main__':
     soil_coef = coefficients(heat_capacity=0.5, albedo=0.1, heat_transfer=0.004)
     water_coef = coefficients(heat_capacity=100, albedo=0.2, heat_transfer=0.01)
@@ -202,4 +207,3 @@ if __name__ == '__main__':
         mars.update(angle)
         print(iteration)
     plt.show()
-print("--- %s seconds ---" % (time.time() - start_time))
