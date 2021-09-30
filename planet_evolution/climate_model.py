@@ -16,6 +16,8 @@ import matplotlib.animation as animation
 from line_profiler_pycharm import profile
 
 #matplotlib.use('TkAgg')
+from tqdm import tqdm
+
 import config as c
 
 
@@ -56,6 +58,7 @@ class Planet:
             density_coeff=1.0,  # Fluid density. Denser fluids care respond to pressure more slowly.
             diffusion_coeff=1e-3  # Diffusion coefficient. Higher values cause higher diffusion and viscosity.
         )
+        self.output = numpy.zeros((self.w, self.h, 3))
 
     def update(self, angle):
         self.iteration += 1
@@ -189,6 +192,13 @@ class Planet:
 
         plt.show()
 
+    def simulation(self, iterations=1000):
+        for iteration in tqdm(range(iterations)):
+            angle = sin(iteration / 100) * 30
+            self.update(angle)
+
+
+
 
 if __name__ == '__main__':
     soil_coef = coefficients(heat_capacity=0.5, albedo=0.1, heat_transfer=0.004)
@@ -199,11 +209,4 @@ if __name__ == '__main__':
                   soil_coef=soil_coef,
                   water_coef=water_coef,
                   air_coef=air_coef)
-
-    for iteration in range(1, 10000):
-        if iteration % 30 == 0:
-            mars.visualize()
-        angle = sin(iteration / 100) * 30
-        mars.update(angle)
-        print(iteration)
-    plt.show()
+    mars.simulation(1000)
