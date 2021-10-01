@@ -15,10 +15,11 @@ from matplotlib.pyplot import figure, draw, pause
 import matplotlib.animation as animation
 from line_profiler_pycharm import profile
 
-#matplotlib.use('TkAgg')
+# matplotlib.use('TkAgg')
 from tqdm import tqdm
 
 import config as c
+from visdom_plotter import VisdomPlotter
 
 
 class coefficients:
@@ -37,6 +38,7 @@ class Planet:
         self.soil_coef = soil_coef
         self.water_coef = water_coef
         self.air_coef = air_coef
+        self.plotter = VisdomPlotter(env_name='Tutorial Plots')
 
         self.topography = np.array(cv2.imread(topography_path, 0))
         self.w, self.h = self.topography.shape
@@ -58,7 +60,8 @@ class Planet:
             density_coeff=1.0,  # Fluid density. Denser fluids care respond to pressure more slowly.
             diffusion_coeff=1e-3  # Diffusion coefficient. Higher values cause higher diffusion and viscosity.
         )
-        self.output = numpy.zeros((self.w, self.h, 3))
+        self.coriolis = numpy.cos(numpy.tile(numpy.linspace(0, 1.0, num=self.w), (self.h, 1)).T * numpy.pi)
+        self.coriolis = numpy.stack([numpy.zeros((self.w, self.h)), self.coriolis], axis=2)
 
     def update(self, angle):
         self.iteration += 1
@@ -68,7 +71,6 @@ class Planet:
         self.update_atmosphere_pressure()
 
         self.do_wind_diffusion()
-
 
     def update_temperature(self):
         self.surface_temperature += self.solar_irradiance * \
@@ -119,7 +121,7 @@ class Planet:
                           self.air_temperature,
                           self.air_temperature), axis=2)
 
-        color=color.get()
+        color = color.get()
         self.atmosphere_pressure = self.atmosphere_pressure.get()
 
         for i in range(10):
@@ -131,26 +133,17 @@ class Planet:
                 config=self.atmosphere_simulation_config
             )
 
+            self.atmosphere_velocity += 0.1 * self.coriolis# * numpy.sum(self.atmosphere_velocity**2)**0.5
+
         self.atmosphere_pressure = np.array(self.atmosphere_pressure)
         self.air_temperature = copy(np.array(color[:, :, 0]))
 
-        color = numpy.array(color)
-        color /= numpy.max(color)
-        color -= numpy.min(color)
-        from matplotlib.pyplot import figure
-
-        fig = figure(figsize=(10, 10))
-        plt.axis('off')
-        plt.imshow(color[:,:,0])
-        plt.savefig(f'output/{self.iteration}.jpg')
-        plt.close(fig)
-
     def __build_solar_irradiance(self):
-        solar_irradiance = np.concatenate([np.tile(np.linspace(0, 1.0, num=self.topography.shape[0] // 2),
+        self.lat = np.concatenate([np.tile(np.linspace(0, 1.0, num=self.topography.shape[0] // 2),
                                                    (self.topography.shape[1], 1)).T,
                                            np.tile(np.linspace(1.0, 0, num=self.topography.shape[0] // 2),
                                                    (self.topography.shape[1], 1)).T])
-        solar_irradiance = np.sin(solar_irradiance * np.pi / 2)
+        solar_irradiance = np.sin(self.lat * np.pi / 2)
         roll = int(self.angle / 180 * self.topography.shape[0])
 
         solar_irradiance = np.roll(solar_irradiance, roll, axis=0)
@@ -161,43 +154,23 @@ class Planet:
         return solar_irradiance
 
     def visualize(self):
-        fig, axs = plt.subplots(nrows=6, ncols=2, figsize=(10, 20))
-        axs[0][0].set_title('topography')
-        axs[0][0].imshow(self.topography.get())
-
-        axs[0][1].set_title('water')
-        axs[0][1].imshow(self.water.get())
-
-        axs[1][1].set_title('solar_irradiance')
-        axs[1][1].imshow(self.solar_irradiance.get())
-
-        axs[2][0].set_title('surface_temperature')
-        axs[2][0].imshow(self.surface_temperature.get())
-
-        axs[2][1].set_title('surface_temperature')
-        axs[2][1].hist(self.surface_temperature[self.water == 0].get().reshape(-1), bins=30, alpha=0.5)
-        axs[2][1].hist(self.surface_temperature[self.water != 0].get().reshape(-1), bins=30, alpha=0.5)
-
-        axs[3][0].set_title('air_temperature')
-        axs[3][0].imshow(self.air_temperature.get())
-
-        axs[3][1].set_title('air_temperature_hist')
-        axs[3][1].hist(self.air_temperature.get().reshape(-1), bins=30)
-
-        axs[4][0].set_title('atmosphere_pressure')
-        axs[4][0].imshow(self.atmosphere_pressure.get())
-
-        axs[4][1].set_title('atmosphere_pressure_hist')
-        axs[4][1].hist(self.atmosphere_pressure.get().reshape(-1), bins=30)
-
-        plt.show()
+        maps = {
+            'topography': self.topography.get(),
+            'water': self.water.get(),
+            'solar_irradiance': self.solar_irradiance.get(),
+            'surface_temperature': self.surface_temperature.get(),
+            'air_temperature': self.air_temperature.get(),
+            'atmosphere_pressure': self.atmosphere_pressure.get()
+        }
+        self.plotter.plot_map(maps)
+        # self.plotter.plot_wind(self.atmosphere_velocity)
 
     def simulation(self, iterations=1000):
         for iteration in tqdm(range(iterations)):
-            angle = sin(iteration / 100) * 30
+            angle = sin(iteration / 300) * 30
             self.update(angle)
-
-
+            if iteration % 10 == 0:
+                self.visualize()
 
 
 if __name__ == '__main__':
@@ -209,4 +182,4 @@ if __name__ == '__main__':
                   soil_coef=soil_coef,
                   water_coef=water_coef,
                   air_coef=air_coef)
-    mars.simulation(1000)
+    mars.simulation(10000)
