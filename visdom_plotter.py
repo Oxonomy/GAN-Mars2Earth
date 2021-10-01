@@ -45,10 +45,9 @@ class VisdomPlotter:
         self.viz.image(heatmap, win='map')
 
     def plot_wind(self, wind_map):
-        self.viz.quiver(wind_map[:,:,0],
-                        wind_map[:,:,1], win='wind_map')
+        self.viz.quiver(wind_map[:, :, 0],
+                        wind_map[:, :, 1], win='wind_map')
 
 
 if __name__ == "__main__":
     plotter = VisdomPlotter(env_name='Tutorial Plots')
-

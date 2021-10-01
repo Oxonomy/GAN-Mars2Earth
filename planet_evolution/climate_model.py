@@ -3,23 +3,21 @@ from copy import copy
 from math import sin
 import time
 import deltaflow
-import numpy
 import cv2
-import cupy as np
-import matplotlib
-from cupyx import scipy
-from cupyx.scipy.ndimage import gaussian_filter
-from matplotlib import pyplot as plt
-from matplotlib.image import imread, imsave
-from matplotlib.pyplot import figure, draw, pause
-import matplotlib.animation as animation
+import numpy as np
+import jax.numpy as jnp
+from jax import grad, jit, vmap
+from scipy.ndimage import gaussian_filter
 from line_profiler_pycharm import profile
 
 # matplotlib.use('TkAgg')
 from tqdm import tqdm
 
 import config as c
+from planet_evolution.utils import do_heat_transfer
 from visdom_plotter import VisdomPlotter
+
+do_heat_transfer = jit(do_heat_transfer)
 
 
 class coefficients:
@@ -52,16 +50,16 @@ class Planet:
         self.air_temperature = np.ones(self.topography.shape) * 6
 
         self.atmosphere_pressure = self.air_temperature
-        self.atmosphere_velocity = numpy.zeros((self.w, self.h, 2))
-        self.atmosphere_force = numpy.zeros((self.w, self.h, 2))
+        self.atmosphere_velocity = np.zeros((self.w, self.h, 2))
+        self.atmosphere_force = np.zeros((self.w, self.h, 2))
 
         self.atmosphere_simulation_config = deltaflow.SimulationConfig(
             delta_t=0.1,
             density_coeff=1.0,  # Fluid density. Denser fluids care respond to pressure more slowly.
             diffusion_coeff=1e-3  # Diffusion coefficient. Higher values cause higher diffusion and viscosity.
         )
-        self.coriolis = numpy.cos(numpy.tile(numpy.linspace(0, 1.0, num=self.w), (self.h, 1)).T * numpy.pi)
-        self.coriolis = numpy.stack([numpy.zeros((self.w, self.h)), self.coriolis], axis=2)
+        self.coriolis = np.sin(np.tile(np.linspace(0.5, 1.5, num=self.w), (self.h, 1)).T * np.pi)
+        self.coriolis = self.coriolis.reshape((self.w, self.h, 1))
 
     def update(self, angle):
         self.iteration += 1
@@ -77,7 +75,7 @@ class Planet:
                                     (self.water / self.water_coef.heat_capacity * (1 - self.water_coef.albedo)
                                      + (1 - self.water) / self.soil_coef.heat_capacity * (1 - self.water_coef.albedo))
 
-        self.surface_temperature, self.air_temperature = self.do_heat_transfer(
+        self.surface_temperature, self.air_temperature = do_heat_transfer(
             matrix_a=self.surface_temperature,
             matrix_b=self.air_temperature,
             mask=self.water,
@@ -85,7 +83,7 @@ class Planet:
             heat_capacity_coefficient_b=self.air_coef.heat_capacity,
             heat_transfer_coefficient=self.water_coef.heat_transfer)
 
-        self.surface_temperature, self.air_temperature = self.do_heat_transfer(
+        self.surface_temperature, self.air_temperature = do_heat_transfer(
             matrix_a=self.surface_temperature,
             matrix_b=self.air_temperature,
             mask=(1 - self.water),
@@ -99,30 +97,15 @@ class Planet:
                                     * (self.water / self.water_coef.heat_capacity
                                        + (1 - self.water) / self.soil_coef.heat_capacity)
 
-        # self.air_temperature = np.abs(self.air_temperature)
-        # self.air_temperature -= 0.92 * self.air_temperature ** 4 / self.air_coef.heat_capacity / 10 ** 3
-
         self.air_temperature = gaussian_filter(self.air_temperature, sigma=3)
 
     def update_atmosphere_pressure(self):
         self.atmosphere_pressure = 100 / np.copy(self.air_temperature)
 
-    def do_heat_transfer(self, matrix_a, matrix_b, mask,
-                         heat_capacity_coefficient_a=100.0,
-                         heat_capacity_coefficient_b=1.0,
-                         heat_transfer_coefficient=0.1):
-        temperature_delta_b = (matrix_a - matrix_b) * heat_transfer_coefficient * mask
-        energy_delta = temperature_delta_b * heat_capacity_coefficient_b
-        temperature_delta_a = -energy_delta / heat_capacity_coefficient_a
-        return matrix_a + temperature_delta_a, matrix_b + temperature_delta_b
-
     def do_wind_diffusion(self):
         color = np.stack((self.air_temperature,
                           self.air_temperature,
                           self.air_temperature), axis=2)
-
-        color = color.get()
-        self.atmosphere_pressure = self.atmosphere_pressure.get()
 
         for i in range(10):
             color, self.atmosphere_velocity, self.atmosphere_pressure = deltaflow.step(
@@ -132,17 +115,27 @@ class Planet:
                 force=self.atmosphere_force,
                 config=self.atmosphere_simulation_config
             )
+            coriolis_velocity = 0.08 * self.coriolis * np.roll(self.atmosphere_velocity, 1, axis=2)
+            coriolis_velocity[:, :, 0] *= -1
+            self.atmosphere_velocity += coriolis_velocity
 
-            self.atmosphere_velocity += 0.1 * self.coriolis# * numpy.sum(self.atmosphere_velocity**2)**0.5
+            """
+            color_border = (color[:, -5:] + np.flip(color[:, :5], 1))/2
+            color = color.at[:, :5].set(np.flip(color_border, 1))
+            color = color.at[:, -5:].set(color_border)
 
-        self.atmosphere_pressure = np.array(self.atmosphere_pressure)
+            atmosphere_pressure_border = (self.atmosphere_pressure[:, -5:] + np.flip(self.atmosphere_pressure[:, :5], 1))/2
+            self.atmosphere_pressure = self.atmosphere_pressure.at[:, :5].set(np.flip(atmosphere_pressure_border, 1))
+            self.atmosphere_pressure = self.atmosphere_pressure.at[:, -5:].set(atmosphere_pressure_border)
+            """
+
         self.air_temperature = copy(np.array(color[:, :, 0]))
 
     def __build_solar_irradiance(self):
         self.lat = np.concatenate([np.tile(np.linspace(0, 1.0, num=self.topography.shape[0] // 2),
-                                                   (self.topography.shape[1], 1)).T,
-                                           np.tile(np.linspace(1.0, 0, num=self.topography.shape[0] // 2),
-                                                   (self.topography.shape[1], 1)).T])
+                                           (self.topography.shape[1], 1)).T,
+                                   np.tile(np.linspace(1.0, 0, num=self.topography.shape[0] // 2),
+                                           (self.topography.shape[1], 1)).T])
         solar_irradiance = np.sin(self.lat * np.pi / 2)
         roll = int(self.angle / 180 * self.topography.shape[0])
 
@@ -155,12 +148,12 @@ class Planet:
 
     def visualize(self):
         maps = {
-            'topography': self.topography.get(),
-            'water': self.water.get(),
-            'solar_irradiance': self.solar_irradiance.get(),
-            'surface_temperature': self.surface_temperature.get(),
-            'air_temperature': self.air_temperature.get(),
-            'atmosphere_pressure': self.atmosphere_pressure.get()
+            'topography': self.topography,
+            'water': self.water,
+            'solar_irradiance': self.solar_irradiance,
+            'surface_temperature': self.surface_temperature,
+            'air_temperature': self.air_temperature,
+            'atmosphere_pressure': self.atmosphere_pressure
         }
         self.plotter.plot_map(maps)
         # self.plotter.plot_wind(self.atmosphere_velocity)
@@ -169,7 +162,7 @@ class Planet:
         for iteration in tqdm(range(iterations)):
             angle = sin(iteration / 300) * 30
             self.update(angle)
-            if iteration % 10 == 0:
+            if iteration % 1 == 0:
                 self.visualize()
 
 
