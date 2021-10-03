@@ -5,7 +5,7 @@ All images are expected to have values from 0 to 1.
 
 import ffmpeg
 import matplotlib.pyplot as plt
-import numpy as np
+import cupy as np
 from matplotlib import animation
 from typing import Optional
 

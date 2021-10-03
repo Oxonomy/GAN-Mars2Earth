@@ -4,20 +4,16 @@ from math import sin
 import time
 import deltaflow
 import cv2
-import numpy as np
-import jax.numpy as jnp
-from jax import grad, jit, vmap
+import cupy as np
 from scipy.ndimage import gaussian_filter
-from line_profiler_pycharm import profile
 
 # matplotlib.use('TkAgg')
 from tqdm import tqdm
 
 import config as c
-from planet_evolution.utils import do_heat_transfer
+from planet_evolution.utils import do_heat_transfer, map_matrix_padding, map_matrix_repadding
 from visdom_plotter import VisdomPlotter
-
-do_heat_transfer = jit(do_heat_transfer)
+from line_profiler_pycharm import profile
 
 
 class coefficients:
@@ -61,6 +57,7 @@ class Planet:
         self.coriolis = np.sin(np.tile(np.linspace(0.5, 1.5, num=self.w), (self.h, 1)).T * np.pi)
         self.coriolis = self.coriolis.reshape((self.w, self.h, 1))
 
+    @profile
     def update(self, angle):
         self.iteration += 1
         self.angle = angle
@@ -97,7 +94,7 @@ class Planet:
                                     * (self.water / self.water_coef.heat_capacity
                                        + (1 - self.water) / self.soil_coef.heat_capacity)
 
-        self.air_temperature = gaussian_filter(self.air_temperature, sigma=3)
+        # self.air_temperature = gaussian_filter(self.air_temperature, sigma=3)
 
     def update_atmosphere_pressure(self):
         self.atmosphere_pressure = 100 / np.copy(self.air_temperature)
@@ -108,6 +105,12 @@ class Planet:
                           self.air_temperature), axis=2)
 
         for i in range(10):
+            color = map_matrix_padding(color, padding=50)
+            self.atmosphere_velocity = map_matrix_padding(self.atmosphere_velocity, padding=50)
+            self.atmosphere_pressure = map_matrix_padding(self.atmosphere_pressure, padding=50)
+            self.atmosphere_force = map_matrix_padding(self.atmosphere_force, padding=50)
+
+
             color, self.atmosphere_velocity, self.atmosphere_pressure = deltaflow.step(
                 color=color,
                 velocity=self.atmosphere_velocity,
@@ -115,19 +118,15 @@ class Planet:
                 force=self.atmosphere_force,
                 config=self.atmosphere_simulation_config
             )
-            coriolis_velocity = 0.08 * self.coriolis * np.roll(self.atmosphere_velocity, 1, axis=2)
+            color = map_matrix_repadding(color, padding=50)
+            self.atmosphere_velocity = map_matrix_repadding(self.atmosphere_velocity, padding=50)
+            self.atmosphere_pressure = map_matrix_repadding(self.atmosphere_pressure, padding=50)
+            self.atmosphere_force = map_matrix_repadding(self.atmosphere_force, padding=50)
+
+            coriolis_velocity = 0.01 * self.coriolis * np.roll(self.atmosphere_velocity, 1, axis=2)
             coriolis_velocity[:, :, 0] *= -1
             self.atmosphere_velocity += coriolis_velocity
 
-            """
-            color_border = (color[:, -5:] + np.flip(color[:, :5], 1))/2
-            color = color.at[:, :5].set(np.flip(color_border, 1))
-            color = color.at[:, -5:].set(color_border)
-
-            atmosphere_pressure_border = (self.atmosphere_pressure[:, -5:] + np.flip(self.atmosphere_pressure[:, :5], 1))/2
-            self.atmosphere_pressure = self.atmosphere_pressure.at[:, :5].set(np.flip(atmosphere_pressure_border, 1))
-            self.atmosphere_pressure = self.atmosphere_pressure.at[:, -5:].set(atmosphere_pressure_border)
-            """
 
         self.air_temperature = copy(np.array(color[:, :, 0]))
 
@@ -148,12 +147,12 @@ class Planet:
 
     def visualize(self):
         maps = {
-            'topography': self.topography,
-            'water': self.water,
+            'topography': self.topography.get(),
+            'water': self.water.get(),
             'solar_irradiance': self.solar_irradiance,
-            'surface_temperature': self.surface_temperature,
-            'air_temperature': self.air_temperature,
-            'atmosphere_pressure': self.atmosphere_pressure
+            'surface_temperature': self.surface_temperature.get(),
+            'air_temperature': self.air_temperature.get(),
+            'atmosphere_pressure': self.atmosphere_pressure.get()
         }
         self.plotter.plot_map(maps)
         # self.plotter.plot_wind(self.atmosphere_velocity)
