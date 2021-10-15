@@ -2,12 +2,14 @@ import os
 from copy import copy
 from math import sin
 import time
+
+import matplotlib.pyplot as plt
+
 import deltaflow
 import cv2
 import cupy as np
-from scipy.ndimage import gaussian_filter
+# from scipy.ndimage import gaussian_filter
 
-# matplotlib.use('TkAgg')
 from tqdm import tqdm
 
 import config as c
@@ -45,19 +47,18 @@ class Planet:
         self.surface_temperature = np.ones(self.topography.shape) * 6
         self.air_temperature = np.ones(self.topography.shape) * 6
 
-        self.atmosphere_pressure = self.air_temperature
+        self.atmosphere_pressure = np.ones(self.topography.shape) * 15
         self.atmosphere_velocity = np.zeros((self.w, self.h, 2))
         self.atmosphere_force = np.zeros((self.w, self.h, 2))
 
         self.atmosphere_simulation_config = deltaflow.SimulationConfig(
-            delta_t=0.1,
+            delta_t=0.3,
             density_coeff=1.0,  # Fluid density. Denser fluids care respond to pressure more slowly.
             diffusion_coeff=1e-3  # Diffusion coefficient. Higher values cause higher diffusion and viscosity.
         )
         self.coriolis = np.sin(np.tile(np.linspace(0.5, 1.5, num=self.w), (self.h, 1)).T * np.pi)
         self.coriolis = self.coriolis.reshape((self.w, self.h, 1))
 
-    @profile
     def update(self, angle):
         self.iteration += 1
         self.angle = angle
@@ -90,6 +91,7 @@ class Planet:
 
         # Закон Стефана-Больцмана
         self.surface_temperature = np.abs(self.surface_temperature)
+        # ToDo: Эти расчеты нужно оптимизировать, они очень дорогие вычислительно
         self.surface_temperature -= 0.92 * self.surface_temperature ** 4 / 10 ** 4 \
                                     * (self.water / self.water_coef.heat_capacity
                                        + (1 - self.water) / self.soil_coef.heat_capacity)
@@ -97,7 +99,11 @@ class Planet:
         # self.air_temperature = gaussian_filter(self.air_temperature, sigma=3)
 
     def update_atmosphere_pressure(self):
-        self.atmosphere_pressure = 100 / np.copy(self.air_temperature)
+        air_temperature = np.copy(self.air_temperature)
+        air_temperature -= np.min(air_temperature)
+        air_temperature /= np.max(air_temperature) * 100
+        air_temperature += 0.95
+        # self.atmosphere_pressure = self.atmosphere_pressure / air_temperature * 10
 
     def do_wind_diffusion(self):
         color = np.stack((self.air_temperature,
@@ -109,7 +115,6 @@ class Planet:
             self.atmosphere_velocity = map_matrix_padding(self.atmosphere_velocity, padding=50)
             self.atmosphere_pressure = map_matrix_padding(self.atmosphere_pressure, padding=50)
             self.atmosphere_force = map_matrix_padding(self.atmosphere_force, padding=50)
-
 
             color, self.atmosphere_velocity, self.atmosphere_pressure = deltaflow.step(
                 color=color,
@@ -123,10 +128,12 @@ class Planet:
             self.atmosphere_pressure = map_matrix_repadding(self.atmosphere_pressure, padding=50)
             self.atmosphere_force = map_matrix_repadding(self.atmosphere_force, padding=50)
 
+            d = 0.1
+            self.atmosphere_pressure = 30/color[:, :, 0] * d + self.atmosphere_pressure * (1-d)
+
             coriolis_velocity = 0.01 * self.coriolis * np.roll(self.atmosphere_velocity, 1, axis=2)
             coriolis_velocity[:, :, 0] *= -1
             self.atmosphere_velocity += coriolis_velocity
-
 
         self.air_temperature = copy(np.array(color[:, :, 0]))
 
@@ -149,28 +156,30 @@ class Planet:
         maps = {
             'topography': self.topography.get(),
             'water': self.water.get(),
-            'solar_irradiance': self.solar_irradiance,
+            'solar_irradiance': self.solar_irradiance.get(),
             'surface_temperature': self.surface_temperature.get(),
             'air_temperature': self.air_temperature.get(),
             'atmosphere_pressure': self.atmosphere_pressure.get()
         }
         self.plotter.plot_map(maps)
+
+        self.plotter.plot_hist(self.atmosphere_pressure.get().reshape(-1))
         # self.plotter.plot_wind(self.atmosphere_velocity)
 
     def simulation(self, iterations=1000):
         for iteration in tqdm(range(iterations)):
-            angle = sin(iteration / 300) * 30
+            angle = sin(iteration / 100) * 30
             self.update(angle)
-            if iteration % 1 == 0:
+            if iteration % 10 == 1:
                 self.visualize()
 
 
 if __name__ == '__main__':
-    soil_coef = coefficients(heat_capacity=0.5, albedo=0.1, heat_transfer=0.004)
+    soil_coef = coefficients(heat_capacity=5, albedo=0.1, heat_transfer=0.01)
     water_coef = coefficients(heat_capacity=100, albedo=0.2, heat_transfer=0.01)
     air_coef = coefficients(heat_capacity=10, albedo=1, heat_transfer=0.01)
-    mars = Planet(topography_path=os.path.join(c.DATA_ROOT, 'mars_topography_test.tif'),
-                  sea_altitude=30,
+    mars = Planet(topography_path=os.path.join(c.DATA_ROOT, 'earth_topography.tif'),
+                  sea_altitude=1,
                   soil_coef=soil_coef,
                   water_coef=water_coef,
                   air_coef=air_coef)

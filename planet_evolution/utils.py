@@ -1,4 +1,4 @@
-import cupy as np
+import numpy as np
 
 
 def do_heat_transfer(matrix_a, matrix_b, mask,

@@ -1,4 +1,5 @@
 import time
+from copy import copy
 
 import cv2
 import numpy as np
@@ -45,8 +46,15 @@ class VisdomPlotter:
         self.viz.image(heatmap, win='map')
 
     def plot_wind(self, wind_map):
-        self.viz.quiver(wind_map[:, :, 0],
-                        wind_map[:, :, 1], win='wind_map')
+        wind_map = copy(wind_map)[::10, ::10]
+        self.viz.quiver(wind_map[:, :, 0].T,
+                        wind_map[:, :, 1].T, win='wind_map')
+
+    def plot_hist(self, data):
+        self.viz.histogram(data, win='hist')
+
+    def plot_value_history(self, data):
+        self.viz.plotlyplot(data, win='hist')
 
 
 if __name__ == "__main__":
